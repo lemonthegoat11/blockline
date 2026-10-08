@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Blockline (PlayFab)</title>
+<style>
+:root{--ink:#eef2f8;--panel:rgba(22,28,40,.82);--edge:#0a0d14;--accent:#ffc857;--bg:#8ec9f0;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--panel:rgba(12,16,26,.88);--bg:#0b1020}}
+:root[data-theme="dark"]{--panel:rgba(12,16,26,.88);--bg:#0b1020}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{height:100%;margin:0;overflow:hidden}
+body{background:var(--bg);color:var(--ink);font:13px/1.45 ui-monospace,"SF Mono",Menlo,Consolas,monospace;user-select:none;-webkit-user-select:none}
+canvas{position:fixed;inset:0;display:block;cursor:crosshair;touch-action:none}
+#card{position:fixed;left:14px;top:calc(14px + env(safe-area-inset-top,0px));background:var(--panel);border:2px solid var(--edge);box-shadow:0 3px 0 var(--edge);padding:10px 14px;max-width:260px;transition:opacity .6s}
+#card h1{font-size:15px;margin:0 0 4px;color:var(--accent);letter-spacing:.04em}
+#card p{margin:0;opacity:.9}
+#card.off{opacity:0;pointer-events:none}
+#bar{position:fixed;left:0;right:0;bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center;gap:6px;pointer-events:none;flex-wrap:wrap;padding:0 8px}
+.slot{width:52px;height:52px;position:relative;background:var(--panel);border:2px solid var(--edge);box-shadow:0 3px 0 var(--edge);image-rendering:pixelated}
+.slot i{position:absolute;inset:9px;background-size:100% 100%;image-rendering:pixelated}
+.slot b{position:absolute;right:3px;bottom:1px;font-size:12px;text-shadow:1px 1px 0 var(--edge)}
+.slot s{position:absolute;left:4px;top:1px;font-size:10px;text-decoration:none;opacity:.6}
+.slot.on{border-color:var(--accent);transform:translateY(-4px)}
+.slot.empty i{opacity:.28}
+#toast{position:fixed;left:50%;top:calc(18px + env(safe-area-inset-top,0px));transform:translateX(-50%);background:var(--panel);border:2px solid var(--edge);padding:6px 12px;opacity:0;transition:opacity .25s}
+#toast.show{opacity:1}
+#clock{position:fixed;right:14px;top:calc(14px + env(safe-area-inset-top,0px));background:var(--panel);border:2px solid var(--edge);box-shadow:0 3px 0 var(--edge);padding:4px 10px}
+#custBtn{position:fixed;right:14px;top:calc(52px + env(safe-area-inset-top,0px));background:var(--panel);color:var(--ink);border:2px solid var(--edge);box-shadow:0 3px 0 var(--edge);padding:4px 10px;font:inherit;cursor:pointer}
+#custBtn:focus-visible,.sw:focus-visible,#cust input:focus-visible{outline:2px solid var(--accent)}
+#cust{position:fixed;right:14px;top:calc(92px + env(safe-area-inset-top,0px));background:var(--panel);border:2px solid var(--edge);box-shadow:0 3px 0 var(--edge);padding:12px 14px;width:236px;display:none}
+#cust.open{display:block}
+#cust h2{font-size:14px;margin:0 0 8px;color:var(--accent)}
+#cust .row{display:flex;align-items:center;gap:5px;margin:7px 0}
+#cust .row span{width:46px;opacity:.8}
+#cust .sw{width:22px;height:22px;border:2px solid var(--edge);cursor:pointer;padding:0}
+#cust .sw.on{outline:2px solid var(--accent)}
+#cust input{width:100%;box-sizing:border-box;background:var(--edge);color:var(--ink);border:2px solid var(--edge);padding:5px 6px;font:inherit}
+#acctBtn{position:fixed;right:162px;top:calc(52px + env(safe-area-inset-top,0px));background:var(--panel);color:var(--ink);border:2px solid var(--edge);box-shadow:0 3px 0 var(--edge);padding:4px 10px;font:inherit;cursor:pointer}
+#auth{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:5}
+#auth.open{display:flex}
+#auth .box{background:var(--panel);border:2px solid var(--edge);box-shadow:0 3px 0 var(--edge);padding:16px 18px;width:min(320px,86vw)}
+#auth h2{font-size:15px;margin:0 0 6px;color:var(--accent)}
+#auth label{display:block;margin-top:9px}
+#auth input{display:block;width:100%;box-sizing:border-box;margin-top:3px;background:var(--edge);color:var(--ink);border:2px solid var(--edge);padding:6px 7px;font:inherit}
+#auth .btns{display:flex;gap:6px;margin-top:12px}
+.btn{flex:1;background:var(--edge);color:var(--ink);border:2px solid var(--edge);padding:6px 4px;font:inherit;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+#auth input:focus-visible,.btn:focus-visible,#acctBtn:focus-visible{outline:2px solid var(--accent)}
+#clock{text-align:right}
+#msg{min-height:1.4em;margin:10px 0 0;color:var(--accent)}
+.slot{pointer-events:auto;cursor:pointer}
+html,body{-webkit-touch-callout:none}
+#touch{display:none}
+@media (pointer:coarse){#touch{display:block}}
+.tb{position:fixed;bottom:calc(86px + env(safe-area-inset-bottom,0px));width:72px;height:72px;background:var(--panel);color:var(--ink);border:2px solid var(--edge);box-shadow:0 3px 0 var(--edge);font:inherit;font-size:24px;touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.tb.on{border-color:var(--accent)}
+#tL{left:14px}#tR{left:94px}#tJ{right:14px}#tM{right:94px;font-size:13px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="card"><h1>Blockline</h1><p>A/D move, W or Space jump.<br>Hold left click to mine, right click to place.<br>1-7 or scroll to pick a block. E turns wood into planks.</p></div>
+<div id="clock">Day 1</div>
+<button id="custBtn" type="button">Customize (C)</button>
+<div id="cust"></div>
+<button id="acctBtn" type="button">Sign in</button>
+<div id="auth" role="dialog" aria-label="Sign in"><div class="box"><h2>Blockline account</h2>
+<div id="ecoNow" style="opacity:.8"></div>
+<label>Email<input id="em" type="email" autocomplete="email"></label>
+<label>Password<input id="pw" type="password" autocomplete="current-password"></label>
+<div class="btns"><button class="btn" id="bLogin" type="button">Log in</button><button class="btn" id="bReg" type="button">Create account</button></div>
+<div class="btns"><button class="btn" id="bGuest" type="button">Play as guest</button><button class="btn" id="bOff" type="button">Play offline</button></div>
+<div id="eco" hidden><label>Community economy Title ID<input id="eid" autocomplete="off" spellcheck="false"></label>
+<div class="btns"><button class="btn" id="bJoin" type="button">Join economy</button><button class="btn" id="bMain" type="button">Back to main</button></div></div>
+<p id="msg" role="alert"></p></div></div>
+<div id="touch"><button class="tb" id="tL" type="button" aria-label="Move left">&#9664;</button><button class="tb" id="tR" type="button" aria-label="Move right">&#9654;</button><button class="tb" id="tM" type="button" aria-label="Switch between mining and placing">Mine</button><button class="tb" id="tJ" type="button" aria-label="Jump">&#9650;</button></div>
+<div id="toast"></div>
+<div id="bar"></div>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+const W=256,H=110,T=32,SEA=46,DAY=180;
+let cw,ch;
+function resize(){const d=Math.min(devicePixelRatio||1,2);cw=innerWidth;ch=innerHeight;cv.width=cw*d;cv.height=ch*d;ctx.setTransform(d,0,0,d,0,0);ctx.imageSmoothingEnabled=false}
+addEventListener('resize',resize);resize();
+
+/* textures */
+const NAMES=['Air','Grass','Dirt','Stone','Wood','Leaves','Coal','Sand','Planks','Bedrock'];
+const HARD=[0,.5,.4,1.2,.8,.15,1.4,.3,.6,99];
+const BASE=[0,[106,170,64],[134,96,67],[125,128,135],[110,80,48],[58,125,52],[125,128,135],[222,208,150],[190,150,92],[40,40,48]];
+function rng(s){return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296}}
+const cl=v=>Math.max(0,Math.min(255,v|0));
+const tex=[null];
+for(let id=1;id<=9;id++){
+  const c=document.createElement('canvas');c.width=c.height=16;const g=c.getContext('2d'),r=rng(id*977+13);
+  const blobs=[];for(let i=0;i<4;i++)blobs.push([r()*14+1,r()*14+1]);
+  for(let y=0;y<16;y++)for(let x=0;x<16;x++){
+    let b=BASE[id],k=(r()-.5)*26;
+    if(id===1&&y>=3+((x*7)%3))b=BASE[2];
+    if(id===4)k+=x%5===0?-24:(x%5===2?10:0);
+    if(id===8)k+=(y%4===3?-30:0)+(((y>>2)%2?x===3:x===11)?-26:0);
+    if(id===5&&r()<.2)b=[30,84,36];
+    if(id===6&&blobs.some(p=>Math.hypot(p[0]-x,p[1]-y)<1.9)){b=[28,28,34];k=0}
+    g.fillStyle=`rgb(${cl(b[0]+k)},${cl(b[1]+k)},${cl(b[2]+k)})`;g.fillRect(x,y,1,1);
+  }
+  tex[id]=c;
+}
+
+/* world */
+const seed=Math.random()*1000;
+const hs=(x,y)=>{const n=Math.sin(x*127.1+y*311.7+seed)*43758.5453;return n-Math.floor(n)};
+const sm=t=>t*t*(3-2*t);
+function vn(x,y){const xi=Math.floor(x),yi=Math.floor(y),xf=sm(x-xi),yf=sm(y-yi);const a=hs(xi,yi),b=hs(xi+1,yi),c=hs(xi,yi+1),d=hs(xi+1,yi+1);return a+(b-a)*xf+(c-a+(a-b-c+d)*xf)*yf}
+const world=new Uint8Array(W*H),surf=[];
+const get=(x,y)=>x<0||x>=W?1:y<0?0:y>=H?1:world[y*W+x];
+const set=(x,y,v)=>{if(x>=0&&x<W&&y>=0&&y<H)world[y*W+x]=v};
+for(let x=0;x<W;x++){
+  const h=Math.floor(SEA+(vn(x/38,0)-.5)*22+(vn(x/11,5)-.5)*5);surf[x]=h;
+  for(let y=h;y<H;y++){
+    let b;
+    if(y===H-1)b=9;
+    else if(y===h)b=h>SEA+5?7:1;
+    else if(y<h+4)b=h>SEA+5?7:2;
+    else{b=3;if(y>h+6&&hs(x*3,y*7)>.94)b=6;if(y>h+7&&vn(x/9,y/7+50)>.68)b=0}
+    set(x,y,b);
+  }
+}
+const spawnX=W>>1;let lastTree=-9;
+for(let x=4;x<W-4;x++){
+  if(Math.abs(x-spawnX)<5||x-lastTree<5||get(x,surf[x])!==1||hs(x,99)<.86)continue;
+  lastTree=x;const th=4+Math.floor(hs(x,3)*2),top=surf[x]-th;
+  for(let dx=-2;dx<=2;dx++)for(let dy=-2;dy<=1;dy++)if(Math.abs(dx)+Math.abs(dy)<4&&!get(x+dx,top+dy))set(x+dx,top+dy,5);
+  for(let y=top;y<surf[x];y++)set(x,y,4);
+}
+
+/* player and state */
+const P={x:spawnX+.15,y:surf[spawnX]-2.2,vx:0,vy:0,w:.7,h:1.8,face:1,gr:false,walk:0};
+const SLOTS=[2,3,4,8,5,7,6],inv={};NAMES.forEach((_,i)=>inv[i]=0);inv[2]=10;
+let sel=0,time=DAY*.15;
+const mouse={x:0,y:0,l:false,r:false},mine={tx:-1,ty:-1,p:0};let cool=0;
+const keys={};
+const PAL={skin:['#f3d2b3','#e8b98a','#c68d5e','#8d5a3b','#5b3a29'],hair:['#4a3022','#1c1c22','#d9a441','#b5472f','#d8d8e0','#3fa7a0'],shirt:['#3b82c4','#d8453d','#4aa564','#e5b23a','#8a5cc2','#e8ecf5'],pants:['#2f3a66','#2b2b33','#6b4a2f','#3d6b4a','#7a2f3a']};
+let look={skin:1,hair:0,shirt:0,pants:0,name:'Player'};
+try{Object.assign(look,JSON.parse(localStorage.getItem('blockline-look')||'{}'))}catch(e){}
+look.name=String(look.name||'Player').slice(0,14);
+const col=k=>PAL[k][look[k]]||PAL[k][0];
+function saveLook(local){try{localStorage.setItem('blockline-look',JSON.stringify(look))}catch(e){}if(!local)cloudSoon()}
+function shade(hex,k){const n=parseInt(hex.slice(1),16);return `rgb(${cl((n>>16)*k)},${cl((n>>8&255)*k)},${cl((n&255)*k)})`}
+const cust=document.getElementById('cust');
+function buildCust(){
+  cust.innerHTML='<h2>Your character</h2><div class="row"><input id="nm" maxlength="14" aria-label="Name"></div>'+Object.keys(PAL).map(k=>`<div class="row"><span>${k[0].toUpperCase()+k.slice(1)}</span>${PAL[k].map((c,i)=>`<button type="button" class="sw${look[k]===i?' on':''}" data-k="${k}" data-i="${i}" style="background:${c}" aria-label="${k} ${i+1}"></button>`).join('')}</div>`).join('');
+  const nm=cust.querySelector('#nm');nm.value=look.name;nm.oninput=()=>{look.name=nm.value.trim()||'Player';saveLook()};
+}
+cust.addEventListener('click',e=>{const b=e.target.closest('.sw');if(!b)return;look[b.dataset.k]=+b.dataset.i;saveLook();buildCust()});
+function toggleCust(){cust.classList.toggle('open')}
+document.getElementById('custBtn').onclick=toggleCust;
+buildCust();
+
+/* PlayFab accounts (talks to PlayFab's Client API directly) */
+const MAIN_TITLE_ID='1E6A2A';  // the main economy
+const $=id=>document.getElementById(id);
+const PF={title:MAIN_TITLE_ID,main:MAIN_TITLE_ID,ticket:null,id:null,who:''};
+let coins=0;const placed=new Set(),VAL=[0,1,1,2,2,0,5,1,0,0];
+const ecoName=()=>PF.title===PF.main?'Main economy':'Economy '+PF.title;
+function resetWallet(){coins=0;placed.clear();for(const k in inv)inv[k]=0;inv[2]=10;hud()}
+try{const eco=localStorage.getItem('blockline-economy')||'';if(/^[A-Za-z0-9]{2,12}$/.test(eco))PF.title=eco.toUpperCase();$('em').value=localStorage.getItem('blockline-email')||''}catch(e){}
+$('ecoNow').textContent=ecoName();
+const msg=t=>{$('msg').textContent=t||''};
+async function pf(path,body,auth){
+  const r=await fetch(`https://${PF.title}.playfabapi.com${path}`,{method:'POST',headers:Object.assign({'Content-Type':'application/json'},auth?{'X-Authorization':PF.ticket}:{}),body:JSON.stringify(body)});
+  let j={};try{j=await r.json()}catch(e){}
+  if(j.code!==200)throw new Error(j.errorMessage||j.error||'Could not reach PlayFab. Check the Title ID.');
+  return j.data;
+}
+let cloudT;
+function payload(){return{look:JSON.stringify(look),wallet:JSON.stringify({coins,inv:SLOTS.reduce((o,id)=>(o[id]=inv[id],o),{})})}}
+function cloudSoon(){
+  if(!PF.ticket)return;clearTimeout(cloudT);
+  cloudT=setTimeout(()=>pf('/Client/UpdateUserData',{Data:payload()},true).catch(()=>toast('Could not save to PlayFab')),800);
+}
+async function loadCloud(){
+  try{
+    const d=await pf('/Client/GetUserData',{Keys:['look','wallet']},true),v=d.Data&&d.Data.look,w=d.Data&&d.Data.wallet;
+    resetWallet();
+    if(v){
+      const o=JSON.parse(v.Value);
+      for(const k in PAL)if(Number.isInteger(o[k])&&o[k]>=0&&o[k]<PAL[k].length)look[k]=o[k];
+      if(typeof o.name==='string')look.name=o.name.slice(0,14)||'Player';
+      buildCust();saveLook(true);
+    }
+    if(w){
+      const o=JSON.parse(w.Value);coins=Math.max(0,Math.min(1e9,o.coins|0));
+      for(const id of SLOTS){const n=o.inv&&o.inv[id];if(Number.isInteger(n)&&n>=0&&n<1e6)inv[id]=n}
+      hud();
+    }else await pf('/Client/UpdateUserData',{Data:payload()},true);
+  }catch(e){toast('Signed in, but your saved data did not load')}
+}
+async function signIn(mode){
+  const Email=$('em').value.trim(),Password=$('pw').value,TitleId=PF.title;
+  if(mode!=='guest'&&(!Email||Password.length<6))return msg('Enter an email and a password of at least 6 characters.');
+  msg('Connecting...');
+  try{
+    let d;
+    if(mode==='login')d=await pf('/Client/LoginWithEmailAddress',{TitleId,Email,Password});
+    else if(mode==='register')d=await pf('/Client/RegisterPlayFabUser',{TitleId,Email,Password,RequireBothUsernameAndEmail:false});
+    else{
+      let g=null;try{g=localStorage.getItem('blockline-guest')}catch(e){}
+      if(!g){g='g'+Math.random().toString(36).slice(2)+Date.now().toString(36);try{localStorage.setItem('blockline-guest',g)}catch(e){}}
+      d=await pf('/Client/LoginWithCustomID',{TitleId,CustomId:g,CreateAccount:true});
+    }
+    PF.ticket=d.SessionTicket;PF.id=d.PlayFabId;PF.who=mode==='guest'?'guest':Email;
+    try{if(Email)localStorage.setItem('blockline-email',Email)}catch(e){}
+    $('pw').value='';
+    await loadCloud();
+    $('auth').classList.remove('open');$('acctBtn').textContent='Log out';toast('Signed in as '+PF.who);
+  }catch(err){PF.ticket=null;msg(err.message)}
+}
+$('bLogin').onclick=()=>signIn('login');
+$('bReg').onclick=()=>signIn('register');
+$('bGuest').onclick=()=>signIn('guest');
+$('bOff').onclick=()=>$('auth').classList.remove('open');
+$('auth').addEventListener('keydown',e=>{if(e.key==='Enter')e.target.id==='eid'?$('bJoin').click():signIn('login');if(e.key==='Escape')$('auth').classList.remove('open')});
+async function logout(){
+  if(PF.ticket){clearTimeout(cloudT);try{await pf('/Client/UpdateUserData',{Data:payload()},true)}catch(e){}}
+  PF.ticket=null;PF.id=null;resetWallet();$('acctBtn').textContent='Sign in';
+}
+$('acctBtn').onclick=async()=>{
+  if(PF.ticket){await logout();toast('Logged out')}
+  else{msg('');$('auth').classList.add('open')}
+};
+async function switchEco(id){
+  await logout();PF.title=id;
+  try{localStorage.setItem('blockline-economy',id)}catch(e){}
+  $('ecoNow').textContent=ecoName();
+  msg(id===PF.main?'Back on the main economy. Log in below.':'Joined economy '+id+'. Log in or create an account for it below.');
+}
+$('bJoin').onclick=()=>{
+  const id=$('eid').value.trim().toUpperCase();
+  if(!/^[A-Za-z0-9]{2,12}$/.test(id))return msg('Enter the Title ID of the economy you want to join.');
+  switchEco(id);
+};
+$('bMain').onclick=()=>switchEco(PF.main);
+let tapN=0;$('auth').querySelector('h2').onclick=()=>{if(++tapN>=5)$('eco').hidden=false};
+$('auth').classList.add('open');
+setTimeout(()=>$('em').focus(),0);
+const bar=document.getElementById('bar'),toastEl=document.getElementById('toast'),card=document.getElementById('card'),clock=document.getElementById('clock');
+const icons=tex.map(c=>c?c.toDataURL():'');
+function hud(){
+  bar.innerHTML=SLOTS.map((id,i)=>`<div class="slot${i===sel?' on':''}${inv[id]?'':' empty'}" title="${NAMES[id]}"><s>${i+1}</s><i style="background-image:url(${icons[id]})"></i><b>${inv[id]||''}</b></div>`).join('');
+}
+let tt;function toast(m){toastEl.textContent=m;toastEl.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>toastEl.classList.remove('show'),1400)}
+hud();
+
+addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT')return;
+  if(e.code==='KeyC'&&!e.repeat)toggleCust();
+  keys[e.code]=true;
+  if(['Space','ArrowUp','ArrowDown'].includes(e.code))e.preventDefault();
+  const m=/^Digit([1-7])$/.exec(e.code);if(m){sel=+m[1]-1;hud()}
+  if(e.code==='KeyE'&&!e.repeat){if(inv[4]>0){inv[4]--;inv[8]+=4;hud();cloudSoon();toast('Crafted 4 planks')}else toast('You need wood first')}
+  card.classList.add('off');
+});
+addEventListener('keyup',e=>keys[e.code]=false);
+addEventListener('blur',()=>{for(const k in keys)keys[k]=false;mouse.l=mouse.r=false});
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+cv.addEventListener('pointerdown',e=>{mouse.id=e.pointerId;if(e.button===2||placeMode)mouse.r=true;else mouse.l=true;mouse.x=e.clientX;mouse.y=e.clientY;card.classList.add('off')});
+['pointerup','pointercancel'].forEach(t=>addEventListener(t,e=>{if(e.pointerId===mouse.id)mouse.l=mouse.r=false}));
+cv.addEventListener('pointermove',e=>{mouse.x=e.clientX;mouse.y=e.clientY});
+cv.addEventListener('wheel',e=>{e.preventDefault();sel=(sel+(e.deltaY>0?1:-1)+SLOTS.length)%SLOTS.length;hud()},{passive:false});
+
+function hit(){
+  for(let i=Math.floor(P.x);i<=Math.floor(P.x+P.w-1e-3);i++)
+    for(let j=Math.floor(P.y);j<=Math.floor(P.y+P.h-1e-3);j++)if(get(i,j))return true;
+  return false;
+}
+let camX=0,camY=0;
+function update(dt){
+  time+=dt;
+  const ax=(keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0);
+  P.vx=ax*6;if(ax){P.face=ax;P.walk+=dt*10}
+  if((keys.Space||keys.KeyW||keys.ArrowUp)&&P.gr)P.vy=-11.5;
+  P.vy=Math.min(P.vy+32*dt,25);
+  P.x+=P.vx*dt;if(hit())P.x-=P.vx*dt;
+  P.gr=false;P.y+=P.vy*dt;
+  if(hit()){if(P.vy>0)P.gr=true;P.y-=P.vy*dt;P.vy=0}
+  camX=Math.max(0,Math.min(W*T-cw,(P.x+P.w/2)*T-cw/2));
+  camY=Math.max(0,Math.min(H*T-ch,(P.y+P.h/2)*T-ch/2));
+  const tx=Math.floor((mouse.x+camX)/T),ty=Math.floor((mouse.y+camY)/T);
+  const reach=Math.hypot(tx+.5-(P.x+P.w/2),ty+.5-(P.y+P.h/2))<=5.5;
+  mine.ok=reach;mine.hx=tx;mine.hy=ty;
+  const b=get(tx,ty);
+  if(mouse.l&&reach&&b>0&&ty<H-1){
+    if(mine.tx!==tx||mine.ty!==ty){mine.tx=tx;mine.ty=ty;mine.p=0}
+    mine.p+=dt/HARD[b];
+    if(mine.p>=1){inv[b===1?2:b]++;set(tx,ty,0);mine.p=0;if(!placed.delete(ty*W+tx))coins+=VAL[b];hud();cloudSoon()}
+  }else mine.p=0;
+  cool-=dt;
+  if(mouse.r&&reach&&b===0&&cool<=0){
+    const id=SLOTS[sel],overlap=tx+1>P.x&&tx<P.x+P.w&&ty+1>P.y&&ty<P.y+P.h;
+    if(inv[id]>0&&!overlap){set(tx,ty,id);placed.add(ty*W+tx);inv[id]--;cool=.15;hud();cloudSoon()}
+  }
+}
+
+function lerp(a,b,t){return a+(b-a)*t}
+const clouds=Array.from({length:7},(_,i)=>({x:i*340+hs(i,1)*200,y:40+hs(i,2)*140,w:90+hs(i,3)*90}));
+function draw(){
+  const t=(time%DAY)/DAY,a=t*Math.PI*2,d=Math.max(0,Math.min(1,.5+.75*Math.sin(a)));
+  ctx.fillStyle=`rgb(${lerp(10,130,d)|0},${lerp(14,196,d)|0},${lerp(36,240,d)|0})`;ctx.fillRect(0,0,cw,ch);
+  const ox=cw/2-Math.cos(a)*cw*.4,oy=ch*.55-Math.sin(a)*ch*.45;
+  ctx.fillStyle='#ffd966';ctx.fillRect(ox-18,oy-18,36,36);
+  ctx.fillStyle='#dfe6f5';ctx.fillRect(cw-ox-14,ch*.55+Math.sin(a)*ch*.45-14,28,28);
+  ctx.fillStyle=`rgba(255,255,255,${.85*d})`;
+  for(const c of clouds){const x=((c.x-camX*.25+time*6)%(cw+400)+cw+400)%(cw+400)-200,y=c.y-camY*.1;ctx.fillRect(x,y,c.w,18);ctx.fillRect(x+16,y-12,c.w*.5,14)}
+  const x0=Math.floor(camX/T),x1=Math.ceil((camX+cw)/T),y0=Math.floor(camY/T),y1=Math.ceil((camY+ch)/T);
+  for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){
+    if(x<0||x>=W||y<0||y>=H)continue;
+    const b=world[y*W+x],sx=Math.round(x*T-camX),sy=Math.round(y*T-camY),depth=y-surf[x];
+    if(b){
+      ctx.drawImage(tex[b],sx,sy,T,T);
+      if(depth>3){ctx.fillStyle=`rgba(0,0,0,${Math.min(.62,(depth-3)*.035)})`;ctx.fillRect(sx,sy,T,T)}
+    }else if(depth>2){ctx.fillStyle=`rgba(18,14,24,${Math.min(.93,(depth-2)*.1)})`;ctx.fillRect(sx,sy,T,T)}
+  }
+  if(mine.p>0){
+    const sx=Math.round(mine.tx*T-camX),sy=Math.round(mine.ty*T-camY);
+    ctx.fillStyle=`rgba(0,0,0,${mine.p*.5})`;ctx.fillRect(sx,sy,T,T);
+    ctx.strokeStyle=`rgba(0,0,0,${mine.p*.8})`;ctx.lineWidth=2;ctx.beginPath();
+    ctx.moveTo(sx+4,sy+6);ctx.lineTo(sx+16,sy+16);ctx.lineTo(sx+12,sy+28);
+    if(mine.p>.5){ctx.moveTo(sx+16,sy+16);ctx.lineTo(sx+28,sy+10)}ctx.stroke();
+  }
+  if(mine.ok){ctx.strokeStyle='rgba(255,255,255,.85)';ctx.lineWidth=2;ctx.strokeRect(mine.hx*T-camX+1,mine.hy*T-camY+1,T-2,T-2)}
+  /* player */
+  const px=Math.round(P.x*T-camX),py=Math.round(P.y*T-camY),moving=P.vx!==0&&P.gr,sw=moving?Math.sin(P.walk)*5:0,f=P.face;
+  ctx.fillStyle=col('pants');ctx.fillRect(px+2,py+40,9,18+(sw>0?-Math.abs(sw)/2:0));ctx.fillRect(px+11,py+40,9,18+(sw<0?-Math.abs(sw)/2:0));
+  ctx.fillStyle=col('shirt');ctx.fillRect(px+1,py+20,20,22);
+  ctx.fillStyle=shade(col('shirt'),.8);ctx.fillRect(f>0?px+12:px+1,py+22,9,16);
+  ctx.fillStyle=col('skin');ctx.fillRect(px,py,22,20);
+  ctx.fillStyle=col('hair');ctx.fillRect(px,py,22,6);ctx.fillRect(f>0?px:px+16,py,6,12);
+  ctx.fillStyle='#121722';ctx.fillRect(f>0?px+13:px+5,py+9,4,4);
+  ctx.font='12px ui-monospace,Menlo,Consolas,monospace';ctx.textAlign='center';
+  ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillText(look.name,px+12,py-7);ctx.fillStyle='#fff';ctx.fillText(look.name,px+11,py-8);ctx.textAlign='start';
+  /* night tint */
+  ctx.fillStyle=`rgba(4,6,26,${(1-d)*.5})`;ctx.fillRect(0,0,cw,ch);
+  clock.textContent=`Day ${Math.floor(time/DAY)+1}, ${d>.45?'daytime':'night'}, ${coins} coins, ${ecoName()}`;
+}
+/* touch controls */
+let placeMode=false;
+const hold=(id,code)=>{const b=document.getElementById(id);const on=e=>{e.preventDefault();keys[code]=true;b.classList.add('on')},off=()=>{keys[code]=false;b.classList.remove('on')};b.addEventListener('pointerdown',on);['pointerup','pointercancel','pointerleave'].forEach(t=>b.addEventListener(t,off))};
+hold('tL','KeyA');hold('tR','KeyD');hold('tJ','Space');
+const tM=document.getElementById('tM');
+tM.addEventListener('click',()=>{placeMode=!placeMode;tM.textContent=placeMode?'Place':'Mine';tM.classList.toggle('on',placeMode)});
+bar.addEventListener('click',e=>{const sl=e.target.closest('.slot');if(!sl)return;sel=[...bar.children].indexOf(sl);hud()});
+let last=performance.now();
+function loop(n){const dt=Math.min((n-last)/1000,.033);last=n;update(dt);draw();requestAnimationFrame(loop)}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
