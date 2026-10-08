@@ -163,11 +163,26 @@ buildCust();
 
 /* PlayFab accounts (talks to PlayFab's Client API directly) */
 const MAIN_TITLE_ID='1E6A2A';  // the main economy
+const VC_CODE='GC';  // your PlayFab virtual currency code (must match cloudscript.js)
 const $=id=>document.getElementById(id);
 const PF={title:MAIN_TITLE_ID,main:MAIN_TITLE_ID,ticket:null,id:null,who:''};
 let coins=0;const placed=new Set(),VAL=[0,1,1,2,2,0,5,1,0,0];
 const ecoName=()=>PF.title===PF.main?'Main economy':'Economy '+PF.title;
 function resetWallet(){coins=0;placed.clear();for(const k in inv)inv[k]=0;inv[2]=10;hud()}
+const useVC=()=>PF.ticket&&PF.title===PF.main;
+const pend={};let flushT;
+async function vcBalance(){const d=await pf('/Client/GetUserInventory',{},true);return (d.VirtualCurrency||{})[VC_CODE]|0}
+function vcEarn(b){pend[b]=(pend[b]||0)+1;clearTimeout(flushT);flushT=setTimeout(vcFlush,2500)}
+async function vcFlush(){
+  clearTimeout(flushT);
+  const items=Object.assign({},pend);for(const k in pend)delete pend[k];
+  if(!PF.ticket||!Object.keys(items).length)return;
+  try{
+    const d=await pf('/Client/ExecuteCloudScript',{FunctionName:'mineReward',FunctionParameter:{items},GeneratePlayStreamEvent:false},true);
+    if(d.Error)throw new Error(d.Error.Message||d.Error.Error||'CloudScript error');
+    const r=d.FunctionResult;if(r&&Number.isFinite(r.balance))coins=r.balance;
+  }catch(e){toast('Could not save coins: '+e.message)}
+}
 try{const eco=localStorage.getItem('blockline-economy')||'';if(/^[A-Za-z0-9]{2,12}$/.test(eco))PF.title=eco.toUpperCase();$('em').value=localStorage.getItem('blockline-email')||''}catch(e){}
 $('ecoNow').textContent=ecoName();
 const msg=t=>{$('msg').textContent=t||''};
@@ -198,6 +213,7 @@ async function loadCloud(){
       for(const id of SLOTS){const n=o.inv&&o.inv[id];if(Number.isInteger(n)&&n>=0&&n<1e6)inv[id]=n}
       hud();
     }else await pf('/Client/UpdateUserData',{Data:payload()},true);
+    if(PF.title===PF.main)coins=await vcBalance();
   }catch(e){toast('Signed in, but your saved data did not load')}
 }
 async function signIn(mode){
@@ -226,7 +242,7 @@ $('bGuest').onclick=()=>signIn('guest');
 $('bOff').onclick=()=>$('auth').classList.remove('open');
 $('auth').addEventListener('keydown',e=>{if(e.key==='Enter')e.target.id==='eid'?$('bJoin').click():signIn('login');if(e.key==='Escape')$('auth').classList.remove('open')});
 async function logout(){
-  if(PF.ticket){clearTimeout(cloudT);try{await pf('/Client/UpdateUserData',{Data:payload()},true)}catch(e){}}
+  if(PF.ticket){clearTimeout(cloudT);try{await pf('/Client/UpdateUserData',{Data:payload()},true)}catch(e){}await vcFlush()}
   PF.ticket=null;PF.id=null;resetWallet();$('acctBtn').textContent='Sign in';
 }
 $('acctBtn').onclick=async()=>{
@@ -297,7 +313,7 @@ function update(dt){
   if(mouse.l&&reach&&b>0&&ty<H-1){
     if(mine.tx!==tx||mine.ty!==ty){mine.tx=tx;mine.ty=ty;mine.p=0}
     mine.p+=dt/HARD[b];
-    if(mine.p>=1){inv[b===1?2:b]++;set(tx,ty,0);mine.p=0;if(!placed.delete(ty*W+tx))coins+=VAL[b];hud();cloudSoon()}
+    if(mine.p>=1){inv[b===1?2:b]++;set(tx,ty,0);mine.p=0;if(!placed.delete(ty*W+tx)){coins+=VAL[b];if(useVC())vcEarn(b)}hud();cloudSoon()}
   }else mine.p=0;
   cool-=dt;
   if(mouse.r&&reach&&b===0&&cool<=0){
