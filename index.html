@@ -349,7 +349,7 @@ let look={skin:1,hair:0,shirt:0,pants:0,name:'Player'};
 try{Object.assign(look,JSON.parse(localStorage.getItem('blockline-look')||'{}'))}catch(e){}
 look.name=String(look.name||'Player').slice(0,14);
 const col=k=>PAL[k][look[k]]||PAL[k][0];
-function saveLook(local){try{localStorage.setItem('blockline-look',JSON.stringify(look))}catch(e){}if(!local)cloudSoon()}
+function saveLook(local){try{localStorage.setItem('blockline-look',JSON.stringify(look))}catch(e){}if(!local){cloudSoon();nameSoon()}}
 function shade(hex,k){const n=parseInt(hex.slice(1),16);return `rgb(${cl((n>>16)*k)},${cl((n>>8&255)*k)},${cl((n&255)*k)})`}
 const cust=document.getElementById('cust');
 function buildCust(){
@@ -363,14 +363,16 @@ buildCust();
 
 /* PlayFab accounts (talks to PlayFab's Client API directly) */
 const MAIN_TITLE_ID='1E6A2A';  // the main economy
-const VC_CODE='BC';  // your PlayFab virtual currency code (must match cloudscript.js)
+const VC_CODE='BC';
+const CATALOG_VERSION='';  // leave empty to use your primary catalog, or put your catalog's exact name here  // your PlayFab virtual currency code (must match cloudscript.js)
 const $=id=>document.getElementById(id);
 const PF={title:MAIN_TITLE_ID,main:MAIN_TITLE_ID,ticket:null,id:null,who:''};
 let coins=0;const placed=new Set(),VAL=[0,1,1,2,2,0,5,1,0,0];
 const ecoName=()=>PF.title===PF.main?'Main economy':'Economy '+PF.title;
 function resetWallet(){coins=0;placed.clear();for(const k in inv)inv[k]=0;inv[2]=10;hud()}
 const useVC=()=>PF.ticket&&PF.title===PF.main;
-let owned=new Set(),vcBal=0,catalog=[];
+let owned=new Set(),vcBal=0,catalog=[],fly=false,nameSent='';
+const isOwner=()=>owned.has('owner_wand');
 const pend={};let flushT;
 async function vcBalance(){const d=await pf('/Client/GetUserInventory',{},true);return (d.VirtualCurrency||{})[VC_CODE]|0}
 async function loadInv(){
@@ -382,13 +384,14 @@ async function loadInv(){
 async function openShop(){
   if(!PF.ticket){toast('Sign in to use the shop');return}
   $('shop').classList.add('open');$('shopMsg').textContent='Loading...';
-  try{await vcFlush();await loadInv();const d=await pf('/Client/GetCatalogItems',{},true);catalog=d.Catalog||[];$('shopMsg').textContent='';renderShop()}
+  try{await vcFlush();await loadInv();const d=await pf('/Client/GetCatalogItems',CATALOG_VERSION?{CatalogVersion:CATALOG_VERSION}:{},true);catalog=d.Catalog||[];$('shopMsg').textContent='';renderShop()}
   catch(e){$('shopMsg').textContent=e.message}
 }
 function renderShop(){
   const L=$('shopList');L.innerHTML='';
-  if(!catalog.length){L.textContent='No items in this economy yet.';return}
+  if(!catalog.length){L.textContent='No items found. Add the items to your primary catalog in PlayFab (or set CATALOG_VERSION in the game file).';return}
   for(const it of catalog){
+    if(it.ItemClass==='owner')continue;
     const price=(it.VirtualCurrencyPrices||{})[VC_CODE],has=owned.has(it.ItemId);
     const row=document.createElement('div');row.className='it';
     const info=document.createElement('div');info.textContent=it.DisplayName||it.ItemId;
@@ -469,7 +472,7 @@ async function signIn(mode){
     try{if(Email)localStorage.setItem('blockline-email',Email)}catch(e){}
     $('pw').value='';
     await loadCloud();
-    netStart();
+    netStart();startPoll();syncName();
     $('auth').classList.remove('open');$('acctBtn').textContent='Log out';toast('Signed in as '+PF.who);
   }catch(err){PF.ticket=null;msg(err.message)}
 }
@@ -479,7 +482,7 @@ $('bGuest').onclick=()=>signIn('guest');
 $('bOff').onclick=()=>$('auth').classList.remove('open');
 $('auth').addEventListener('keydown',e=>{if(e.key==='Enter')e.target.id==='eid'?$('bJoin').click():signIn('login');if(e.key==='Escape')$('auth').classList.remove('open')});
 async function logout(){
-  netStop();
+  netStop();clearInterval(pollT);fly=false;nameSent='';
   if(PF.ticket){clearTimeout(cloudT);try{await pf('/Client/UpdateUserData',{Data:payload()},true)}catch(e){}await vcFlush()}
   PF.ticket=null;PF.id=null;owned=new Set();resetWallet();$('acctBtn').textContent='Sign in';
 }
@@ -500,6 +503,38 @@ $('bJoin').onclick=()=>{
 };
 $('bMain').onclick=()=>switchEco(PF.main);
 let tapN=0;$('auth').querySelector('h2').onclick=()=>{if(++tapN>=5)$('eco').hidden=false};
+/* admin hooks: kick and ban polling, display name sync */
+let pollT,kickSeen=null,nameT;
+async function readKick(){
+  const d=await pf('/Client/GetUserReadOnlyData',{Keys:['kick']},true),k=d.Data&&d.Data.kick;
+  let reason='';try{reason=JSON.parse(k.Value).reason}catch(e){}
+  return{t:k?k.LastUpdated:null,reason};
+}
+async function startPoll(){
+  clearInterval(pollT);
+  try{kickSeen=(await readKick()).t}catch(e){kickSeen=null}
+  if(!PF.ticket)return;
+  pollT=setInterval(pollAdmin,15000);
+}
+async function kicked(reason){
+  await logout();msg(reason);$('auth').classList.add('open');toast(reason);
+}
+async function pollAdmin(){
+  if(!PF.ticket)return;
+  try{
+    const r=await readKick();
+    if(r.t!==kickSeen){await kicked(r.reason||'You were removed by a moderator.');return}
+    if(!Object.keys(pend).length)await loadInv();
+  }catch(e){if(/ban/i.test(e.message))await kicked('Your account is banned.')}
+}
+async function syncName(){
+  const n=look.name;
+  if(!PF.ticket||n===nameSent||n==='Player')return;
+  if(n.length<3){toast('Names need 3 or more characters to show in the admin player list');return}
+  try{await pf('/Client/UpdateUserTitleDisplayName',{DisplayName:n},true);nameSent=n}
+  catch(e){toast('Name not saved to the admin list: '+e.message)}
+}
+function nameSoon(){clearTimeout(nameT);nameT=setTimeout(syncName,1200)}
 $('auth').classList.add('open');
 setTimeout(()=>$('em').focus(),0);
 const bar=document.getElementById('bar'),toastEl=document.getElementById('toast'),card=document.getElementById('card'),clock=document.getElementById('clock');
@@ -514,6 +549,7 @@ addEventListener('keydown',e=>{
   if(e.target.tagName==='INPUT')return;
   if(e.code==='KeyC'&&!e.repeat)toggleCust();
   if(e.code==='KeyB'&&!e.repeat)openShop();
+  if(e.code==='KeyF'&&!e.repeat&&isOwner()){fly=!fly;toast(fly?'Flight on (W up, S down)':'Flight off')}
   if((e.code==='KeyT'||e.code==='Enter')&&!e.repeat&&e.target.tagName!=='BUTTON'){e.preventDefault();openChat()}
   keys[e.code]=true;
   if(['Space','ArrowUp','ArrowDown'].includes(e.code))e.preventDefault();
@@ -540,19 +576,19 @@ function update(dt){
   const ax=(keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0);
   P.vx=ax*(owned.has('speed_boots')?8:6);if(ax){P.face=ax;P.walk+=dt*10}
   if((keys.Space||keys.KeyW||keys.ArrowUp)&&P.gr)P.vy=-(owned.has('jump_boots')?13.5:11.5);
-  P.vy=Math.min(P.vy+32*dt,25);
+  if(fly&&isOwner())P.vy=(keys.Space||keys.KeyW||keys.ArrowUp)?-9:(keys.KeyS||keys.ArrowDown)?9:0;else P.vy=Math.min(P.vy+32*dt,25);
   P.x+=P.vx*dt;if(hit())P.x-=P.vx*dt;
   P.gr=false;P.y+=P.vy*dt;
   if(hit()){if(P.vy>0)P.gr=true;P.y-=P.vy*dt;P.vy=0}
   camX=Math.max(0,Math.min(W*T-cw,(P.x+P.w/2)*T-cw/2));
   camY=Math.max(0,Math.min(H*T-ch,(P.y+P.h/2)*T-ch/2));
   const tx=Math.floor((mouse.x+camX)/T),ty=Math.floor((mouse.y+camY)/T);
-  const reach=Math.hypot(tx+.5-(P.x+P.w/2),ty+.5-(P.y+P.h/2))<=(owned.has('long_reach')?8:5.5);
+  const reach=Math.hypot(tx+.5-(P.x+P.w/2),ty+.5-(P.y+P.h/2))<=(isOwner()?30:owned.has('long_reach')?8:5.5);
   mine.ok=reach;mine.hx=tx;mine.hy=ty;
   const b=get(tx,ty);
   if(mouse.l&&reach&&b>0&&ty<H-1){
     if(mine.tx!==tx||mine.ty!==ty){mine.tx=tx;mine.ty=ty;mine.p=0}
-    mine.p+=dt/HARD[b]*(owned.has('iron_pickaxe')?2:1);
+    mine.p+=dt/HARD[b]*(isOwner()?50:owned.has('iron_pickaxe')?2:1);
     if(mine.p>=1){inv[b===1?2:b]++;set(tx,ty,0);netEdit(tx,ty,0);mine.p=0;if(!placed.delete(ty*W+tx)){coins+=VAL[b];if(useVC())vcEarn(b)}hud();cloudSoon()}
   }else mine.p=0;
   netTick(dt);
@@ -565,7 +601,7 @@ function update(dt){
 
 function lerp(a,b,t){return a+(b-a)*t}
 const clouds=Array.from({length:7},(_,i)=>({x:i*340+hs(i,1)*200,y:40+hs(i,2)*140,w:90+hs(i,3)*90}));
-function drawChar(L,px,py,f,moving,walk,crown,name){
+function drawChar(L,px,py,f,moving,walk,crown,name,owner){
   const c=k=>PAL[k][L[k]]||PAL[k][0],sw=moving?Math.sin(walk)*5:0;
   ctx.fillStyle=c('pants');ctx.fillRect(px+2,py+40,9,18+(sw>0?-Math.abs(sw)/2:0));ctx.fillRect(px+11,py+40,9,18+(sw<0?-Math.abs(sw)/2:0));
   ctx.fillStyle=c('shirt');ctx.fillRect(px+1,py+20,20,22);
@@ -576,7 +612,8 @@ function drawChar(L,px,py,f,moving,walk,crown,name){
   if(crown){ctx.fillStyle='#ffc857';ctx.fillRect(px+2,py-8,18,8);ctx.fillRect(px+2,py-12,4,5);ctx.fillRect(px+9,py-12,4,5);ctx.fillRect(px+16,py-12,4,5)}
   const ny=crown?py-16:py-7;
   ctx.font='12px ui-monospace,Menlo,Consolas,monospace';ctx.textAlign='center';
-  ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillText(name,px+12,ny);ctx.fillStyle='#fff';ctx.fillText(name,px+11,ny-1);ctx.textAlign='start';
+  const label=(owner?'[Owner] ':'')+name;
+  ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillText(label,px+12,ny);ctx.fillStyle=owner?'#d9b8ff':'#fff';ctx.fillText(label,px+11,ny-1);ctx.textAlign='start';
 }
 function draw(){
   const t=(time%DAY)/DAY,a=t*Math.PI*2,d=Math.max(0,Math.min(1,.5+.75*Math.sin(a)));
@@ -604,8 +641,8 @@ function draw(){
   }
   if(mine.ok){ctx.strokeStyle='rgba(255,255,255,.85)';ctx.lineWidth=2;ctx.strokeRect(mine.hx*T-camX+1,mine.hy*T-camY+1,T-2,T-2)}
   /* players */
-  for(const id in net.remotes){const r=net.remotes[id];drawChar(r.look,Math.round(r.x*T-camX),Math.round(r.y*T-camY),r.face,r.mv,r.wk||0,r.crown,r.name)}
-  drawChar(look,Math.round(P.x*T-camX),Math.round(P.y*T-camY),P.face,P.vx!==0&&P.gr,P.walk,owned.has('crown'),look.name);
+  for(const id in net.remotes){const r=net.remotes[id];drawChar(r.look,Math.round(r.x*T-camX),Math.round(r.y*T-camY),r.face,r.mv,r.wk||0,r.crown,r.name,r.owner)}
+  drawChar(look,Math.round(P.x*T-camX),Math.round(P.y*T-camY),P.face,P.vx!==0&&P.gr,P.walk,owned.has('crown'),look.name,isOwner());
   /* night tint */
   ctx.fillStyle=`rgba(4,6,26,${(1-d)*.5})`;ctx.fillRect(0,0,cw,ch);
   clock.textContent=`Day ${Math.floor(time/DAY)+1}, ${d>.45?'daytime':'night'}, ${coins} coins, ${ecoName()}${net.on?', '+net.c.myRoomActorCount()+' online':''}`;
@@ -625,7 +662,7 @@ function netTick(dt){
   if(!net.on)return;
   for(const id in net.remotes){const r=net.remotes[id],k=Math.min(1,dt*12);r.x+=(r.tx-r.x)*k;r.y+=(r.ty-r.y)*k;r.wk=(r.wk||0)+(r.mv?dt*10:0)}
   net.acc+=dt;
-  if(net.acc>=.1){net.acc=0;try{net.c.raiseEvent(2,{x:+P.x.toFixed(2),y:+P.y.toFixed(2),f:P.face,m:P.vx!==0&&P.gr?1:0,c:owned.has('crown')?1:0,n:look.name,l:{skin:look.skin,hair:look.hair,shirt:look.shirt,pants:look.pants}})}catch(e){}}
+  if(net.acc>=.1){net.acc=0;try{net.c.raiseEvent(2,{x:+P.x.toFixed(2),y:+P.y.toFixed(2),f:P.face,m:P.vx!==0&&P.gr?1:0,c:owned.has('crown')?1:0,o:isOwner()?1:0,n:look.name,l:{skin:look.skin,hair:look.hair,shirt:look.shirt,pants:look.pants}})}catch(e){}}
 }
 /* chat */
 const chatIn=document.getElementById('chatIn'),chatBox=document.getElementById('chat'),chatLog=document.getElementById('chatLog'),chatSeen={};let chatLast=0;
@@ -647,6 +684,7 @@ chatIn.addEventListener('keydown',e=>{
   if(e.key!=='Enter')return;
   const t=chatIn.value.trim();chatIn.value='';closeChat();
   if(!t)return;
+  if(t==='/id'){addChat('','Your player ID: '+(PF.id||'sign in first'));return}
   const now=Date.now();if(now-chatLast<700)return;chatLast=now;
   addChat(look.name,t);
   if(net.on){try{net.c.raiseEvent(5,{n:look.name,t:t.slice(0,120)})}catch(err){}}
@@ -670,7 +708,7 @@ function netStart(){
     if(code===2){
       if(!isFinite(+data.x)||!isFinite(+data.y))return;
       const r=net.remotes[from]||(net.remotes[from]={x:+data.x,y:+data.y});
-      r.tx=+data.x;r.ty=+data.y;r.face=data.f>0?1:-1;r.mv=!!data.m;r.crown=!!data.c;r.name=String(data.n||'Player').slice(0,14);
+      r.tx=+data.x;r.ty=+data.y;r.face=data.f>0?1:-1;r.mv=!!data.m;r.crown=!!data.c;r.owner=!!data.o;r.name=String(data.n||'Player').slice(0,14);
       const l={};for(const k in PAL){const v=data.l&&data.l[k];l[k]=Number.isInteger(v)&&v>=0&&v<PAL[k].length?v:0}r.look=l;
     }else if(code===1)applyEdit(data.x|0,data.y|0,data.b|0);
     else if(code===3)sendEdits(from);
