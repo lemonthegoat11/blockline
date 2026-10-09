@@ -34,7 +34,7 @@ canvas{position:fixed;inset:0;display:block;width:100%;height:100%;cursor:crossh
 #custBtn{position:fixed;right:14px;top:calc(52px + env(safe-area-inset-top,0px));background:var(--panel);color:var(--ink);border:2px solid var(--edge);box-shadow:0 3px 0 var(--edge);padding:4px 10px;font:inherit;cursor:pointer}
 #custBtn:focus-visible,.sw:focus-visible,#cust input:focus-visible{outline:2px solid var(--accent)}
 #cust{position:fixed;right:14px;top:calc(92px + env(safe-area-inset-top,0px));background:var(--panel);border:2px solid var(--edge);box-shadow:0 3px 0 var(--edge);padding:12px 14px;width:236px;display:none}
-#cust.open{display:block}
+#cust.open{display:block;max-height:calc(100vh - 120px);overflow:auto}
 #cust h2{font-size:14px;margin:0 0 8px;color:var(--accent)}
 #cust .row{display:flex;align-items:center;gap:5px;margin:7px 0}
 #cust .row span{width:46px;opacity:.8}
@@ -344,8 +344,8 @@ const SLOTS=[2,3,4,8,5,7,6],inv={};NAMES.forEach((_,i)=>inv[i]=0);inv[2]=10;
 let sel=0,time=DAY*.15;
 const mouse={x:0,y:0,l:false,r:false},mine={tx:-1,ty:-1,p:0};let cool=0;
 const keys={};
-const PAL={skin:['#f3d2b3','#e8b98a','#c68d5e','#8d5a3b','#5b3a29'],hair:['#4a3022','#1c1c22','#d9a441','#b5472f','#d8d8e0','#3fa7a0'],shirt:['#3b82c4','#d8453d','#4aa564','#e5b23a','#8a5cc2','#e8ecf5'],pants:['#2f3a66','#2b2b33','#6b4a2f','#3d6b4a','#7a2f3a']};
-let look={skin:1,hair:0,shirt:0,pants:0,name:'Player'};
+const PAL={skin:['#f3d2b3','#e8b98a','#c68d5e','#8d5a3b','#5b3a29'],hair:['#4a3022','#1c1c22','#d9a441','#b5472f','#d8d8e0','#3fa7a0'],shirt:['#3b82c4','#d8453d','#4aa564','#e5b23a','#8a5cc2','#e8ecf5'],pants:['#2f3a66','#2b2b33','#6b4a2f','#3d6b4a','#7a2f3a'],tag:['#ffffff','#ffc857','#7ee0a1','#7ec8ff','#ff9aa8','#d9b8ff'],plate:['#2a3248','#000000','#ffc857','#3b82c4','#d8453d','#4aa564']};
+let look={skin:1,hair:0,shirt:0,pants:0,tag:0,plate:0,name:'Player'};
 try{Object.assign(look,JSON.parse(localStorage.getItem('blockline-look')||'{}'))}catch(e){}
 look.name=String(look.name||'Player').slice(0,14);
 const col=k=>PAL[k][look[k]]||PAL[k][0];
@@ -613,7 +613,9 @@ function drawChar(L,px,py,f,moving,walk,crown,name,owner){
   const ny=crown?py-16:py-7;
   ctx.font='12px ui-monospace,Menlo,Consolas,monospace';ctx.textAlign='center';
   const label=(owner?'[Owner] ':'')+name;
-  ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillText(label,px+12,ny);ctx.fillStyle=owner?'#d9b8ff':'#fff';ctx.fillText(label,px+11,ny-1);ctx.textAlign='start';
+  if(L.plate){const w=ctx.measureText(label).width;ctx.fillStyle=c('plate');ctx.fillRect(px+11-w/2-5,ny-13,w+10,17)}
+  else{ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillText(label,px+12,ny)}
+  ctx.fillStyle=owner?'#d9b8ff':c('tag');ctx.fillText(label,px+11,ny-1);ctx.textAlign='start';
 }
 function draw(){
   const t=(time%DAY)/DAY,a=t*Math.PI*2,d=Math.max(0,Math.min(1,.5+.75*Math.sin(a)));
@@ -662,7 +664,7 @@ function netTick(dt){
   if(!net.on)return;
   for(const id in net.remotes){const r=net.remotes[id],k=Math.min(1,dt*12);r.x+=(r.tx-r.x)*k;r.y+=(r.ty-r.y)*k;r.wk=(r.wk||0)+(r.mv?dt*10:0)}
   net.acc+=dt;
-  if(net.acc>=.1){net.acc=0;try{net.c.raiseEvent(2,{x:+P.x.toFixed(2),y:+P.y.toFixed(2),f:P.face,m:P.vx!==0&&P.gr?1:0,c:owned.has('crown')?1:0,o:isOwner()?1:0,n:look.name,l:{skin:look.skin,hair:look.hair,shirt:look.shirt,pants:look.pants}})}catch(e){}}
+  if(net.acc>=.1){net.acc=0;try{net.c.raiseEvent(2,{x:+P.x.toFixed(2),y:+P.y.toFixed(2),f:P.face,m:P.vx!==0&&P.gr?1:0,c:owned.has('crown')?1:0,o:isOwner()?1:0,n:look.name,l:{skin:look.skin,hair:look.hair,shirt:look.shirt,pants:look.pants,tag:look.tag,plate:look.plate}})}catch(e){}}
 }
 /* chat */
 const chatIn=document.getElementById('chatIn'),chatBox=document.getElementById('chat'),chatLog=document.getElementById('chatLog'),chatSeen={};let chatLast=0;
